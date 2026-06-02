@@ -61,24 +61,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Non-root operator. OpenShell's sandbox primitives expect a known
 # uid:gid; 1000:1000 is the convention. Override via build arg if your
 # sandbox manifest pins a different uid.
+#
+# `operator` is a legacy system user on Debian (BSD-derived dialer
+# artifact, GID 37). We don't want it. Picking the user name `sandbox`
+# and a generic group name to avoid the clash, then making sure the
+# requested UID/GID are free before adding.
 ARG OPERATOR_UID=1000
 ARG OPERATOR_GID=1000
-RUN groupadd -g ${OPERATOR_GID} operator \
-    && useradd -m -u ${OPERATOR_UID} -g ${OPERATOR_GID} -s /bin/bash operator
+RUN ( getent group ${OPERATOR_GID} || groupadd -g ${OPERATOR_GID} sandbox ) \
+    && ( getent passwd ${OPERATOR_UID} \
+         || useradd -m -u ${OPERATOR_UID} -g ${OPERATOR_GID} -s /bin/bash sandbox )
 
 # Pull the resolved tree from the builder. The pnpm symlink layout is
 # preserved so the in-tree `node_modules/.bin/enclawed` shim works.
-COPY --from=builder --chown=operator:operator /opt/enclawed /opt/enclawed
+COPY --from=builder --chown=${OPERATOR_UID}:${OPERATOR_GID} /opt/enclawed /opt/enclawed
 
 # Make the enclawed CLI reachable at the conventional path the
 # OpenShell provider yaml declares (providers/enclawed.yaml `binaries`).
-RUN ln -s /opt/enclawed/node_modules/.bin/enclawed /usr/local/bin/enclawed
+# The workspace's own bin (declared in its package.json) isn't linked
+# into node_modules/.bin by pnpm install in a non-global flow; point at
+# the entrypoint script directly and rely on its `#!/usr/bin/env node`
+# shebang. chmod is idempotent and survives the COPY --chown step.
+RUN chmod +x /opt/enclawed/enclawed.mjs \
+    && ln -s /opt/enclawed/enclawed.mjs /usr/local/bin/enclawed
 
-COPY --chown=operator:operator entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=${OPERATOR_UID}:${OPERATOR_GID} entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-USER operator
-WORKDIR /home/operator
+USER ${OPERATOR_UID}:${OPERATOR_GID}
+WORKDIR /home/sandbox
 ENV ENCLAWED_HOME=/opt/enclawed
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
