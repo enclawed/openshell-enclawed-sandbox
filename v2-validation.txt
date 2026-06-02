@@ -1,0 +1,11 @@
+Waiting for gateway to become healthy...
+Running e2e command against https://127.0.0.1:39397: /tmp/v2chain.sh
+== STEP 1 enable v2 ==
+== STEP 2 import enclawed profile ==
+Imported 1 provider profile.
+== STEP 3 list-profiles ==
+[OK] enclawed in profile list; category= agent ; credentials= [] ; endpoints= 2
+== STEP 4 create provider instance (sentinel credential — keyring is owned by enclawed installer inside the sandbox) ==
+== STEP 5 list provider instances ==
+enclawed-demo  enclawed  1                 0
+== ALL STEPS PASSED ==
